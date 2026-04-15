@@ -11,14 +11,14 @@ import java.util.concurrent.TimeoutException;
 
 public class Main {
 
-    private static final String PROJECT_ID  = "*********"; //replace by your project id
+    private static final String PROJECT_ID  = "***********"; //replace by your project id
     private static final String ZONE        = "us-east1-b";
     private static final String VM_NAME     = "java-managed-vm";
     private static final String MACHINE_TYPE = "e2-micro";
     private static final String NETWORK = "global/networks/default";
     private static final String FIREWALL_RULE_NAME = "allow-http";
 
-    // Startup script exécuté au démarrage de la VM
+    // Startup script injected a the VM start
     private static final String STARTUP_SCRIPT = """
             #!/bin/bash
             apt-get update
@@ -48,6 +48,9 @@ public class Main {
             System.out.println("\n=== Call nginx inside the VM ===");
             testHttpConnection(client);
 
+            System.out.println("\n=== Clean firewall rules to back to the initial state ===");
+            deleteFirewallRule();
+
             System.out.println("\n=== Stop the VM ===");
             stopInstance(client);
 
@@ -70,9 +73,9 @@ public class Main {
 
 
     static void createVm(InstancesClient client)
-            throws IOException, ExecutionException, InterruptedException, TimeoutException {
+            throws ExecutionException, InterruptedException, TimeoutException {
 
-        // Attach a boot disk
+        // Attach the mandatory boot disk
         AttachedDisk disk = AttachedDisk.newBuilder()
                 .setBoot(true)// tell is a boot disk
                 .setAutoDelete(true) //delete the disk during the vm deletion
@@ -103,7 +106,8 @@ public class Main {
                         String.format("zones/%s/machineTypes/%s", ZONE, MACHINE_TYPE))
                 .addDisks(disk)
                 .addNetworkInterfaces(networkInterface)
-               // .setMetadata(metadata)
+                .setTags(Tags.newBuilder().addItems("web").build())  // Tag required for the firewall rule
+                .setMetadata(metadata)
                 .build();
 
         // Create the creation query
@@ -218,7 +222,7 @@ public class Main {
                             Allowed.newBuilder().addPorts("80").setIPProtocol("tcp").build())
                     .addSourceRanges("0.0.0.0/0")
                     .setNetwork(NETWORK)
-                    .addTargetTags("web")
+                    .addTargetTags("web") //apply firewall rule only on VM instance with the tag "web"
                     .setDescription("Allowing TCP traffic on port 80from Internet.")
                     .build();
 
